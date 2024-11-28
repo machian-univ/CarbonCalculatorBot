@@ -7,13 +7,11 @@ import requests
 import re
 import psycopg2
 from io import BytesIO
-
 import api_requests as api
 from db_config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
 from auth import TELEBOT_TOKEN
 
 matplotlib.use('Agg')
-
 regex_pattern = re.compile(
     r"^(?:http|ftp)s?://"
     r"(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?$)"
@@ -39,6 +37,11 @@ users_url = {}
 try:
     connection = psycopg2.connect(database=DB_NAME, user=DB_USER, password=DB_PASS, host=DB_HOST, port=DB_PORT)
     cursor = connection.cursor()
+    if connection.closed == 0:
+        print("Соединение c базой данных установлено!")
+        print(connection.dsn)
+    else:
+        print("Соединение с базой данных закрыто.")
 except Exception as db_connection_error:
     print(db_connection_error)
 
@@ -48,7 +51,8 @@ def start(message):
     try:
         chat_id = message.chat.id
         username = message.from_user.username
-        api.insert_user(cursor, connection, chat_id, username)
+        if not api.is_user_exists(cursor, chat_id):
+            api.insert_user(cursor, connection, chat_id, username)
 
         keyboard = telebot.types.InlineKeyboardMarkup()
         button_check = telebot.types.InlineKeyboardButton(text="Проверить",
@@ -87,7 +91,8 @@ def is_valid_url(url, pattern=regex_pattern):
 
 def incorrect_url(message):
     chat_id = message.chat.id
-    bot.send_message(chat_id, text='Ой, а что это у нас? Не похоже на сайт🤔 Попробуйте ввести адрес сайта в формате: https://example.com')
+    bot.send_message(chat_id,
+                     text='Ой, а что это у нас? Не похоже на сайт🤔 Попробуйте ввести адрес сайта в формате: https://example.com')
     users_url[chat_id] = {}
 
     bot.register_next_step_handler(message, save_url)
@@ -220,7 +225,7 @@ def clean_btn(call):
     try:
         api.delete_user_history(cursor, connection, chat_id)
         bot.send_message(chat_id=chat_id,
-                              text='Успешно!')
+                         text='Успешно!')
         start(message)
     except Exception as e:
         print(e)
